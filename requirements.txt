@@ -4,4 +4,4 @@ scikit-learn
 opencv-python-headless
 streamlit
 Pillow
-tensorflow-cpu
+mediapipe
