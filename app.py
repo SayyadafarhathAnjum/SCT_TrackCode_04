@@ -3,100 +3,111 @@ from PIL import Image
 import numpy as np
 import io
 import cv2
-import mediapipe as mp
 
-mp_hands = mp.solutions.hands
-mp_drawing = mp.solutions.drawing_utils
-
-GESTURE_LABELS = {
-    "thumbs_up": "👍 Thumbs Up",
-    "thumbs_down": "👎 Thumbs Down",
-    "open_hand": "✋ Open Hand",
-    "fist": "✊ Fist",
-    "peace": "✌️ Peace",
-    "pointing": "☝️ Pointing",
-    "ok": "👌 OK",
-    "unknown": "❓ Unknown"
-}
-
-def get_finger_states(landmarks):
-    fingers = []
-    fingers.append(landmarks[4].x < landmarks[3].x)
-    tips = [8, 12, 16, 20]
-    pips = [6, 10, 14, 18]
-    for tip_idx, pip_idx in zip(tips, pips):
-        fingers.append(landmarks[tip_idx].y < landmarks[pip_idx].y)
-    return fingers
-
-def classify_gesture(landmarks):
-    f = get_finger_states(landmarks)
-    thumb, index, middle, ring, pinky = f
-    if all(f):
-        return "open_hand"
-    if not any(f):
-        return "fist"
-    if thumb and not index and not middle and not ring and not pinky:
-        return "thumbs_up"
-    if not thumb and index and not middle and not ring and not pinky:
-        return "pointing"
-    if not thumb and index and middle and not ring and not pinky:
-        return "peace"
-    if thumb and index and not middle and not ring and not pinky:
-        return "ok"
-    if landmarks[4].y > landmarks[0].y:
-        return "thumbs_down"
-    return "unknown"
-
-def process_image(image_bytes):
-    np_arr = np.frombuffer(image_bytes, np.uint8)
-    img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-    if img is None:
-        return None, "❓ Unknown", "N/A"
-    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    with mp_hands.Hands(
-        static_image_mode=True,
-        max_num_hands=1,
-        min_detection_confidence=0.5
-    ) as hands:
-        results = hands.process(img_rgb)
+def detect_gesture(img_rgb):
+    img_hsv = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2HSV)
+    
+    # Skin color range
+    lower = np.array([0, 20, 70], dtype=np.uint8)
+    upper = np.array([20, 255, 255], dtype=np.uint8)
+    mask = cv2.inRange(img_hsv, lower, upper)
+    
+    # Clean up mask
+    kernel = np.ones((5, 5), np.uint8)
+    mask = cv2.dilate(mask, kernel, iterations=2)
+    mask = cv2.erode(mask, kernel, iterations=1)
+    
+    contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    
+    if not contours:
+        return img_rgb, "No hand detected", "Low"
+    
+    # Largest contour = hand
+    contour = max(contours, key=cv2.contourArea)
+    area = cv2.contourArea(contour)
+    
+    if area < 3000:
+        return img_rgb, "No hand detected", "Low"
+    
+    # Draw contour
     annotated = img_rgb.copy()
-    gesture_key = "unknown"
-    if results.multi_hand_landmarks:
-        for hand_landmarks in results.multi_hand_landmarks:
-            mp_drawing.draw_landmarks(
-                annotated,
-                hand_landmarks,
-                mp_hands.HAND_CONNECTIONS,
-                mp_drawing.DrawingSpec(color=(0, 255, 120), thickness=2, circle_radius=3),
-                mp_drawing.DrawingSpec(color=(255, 100, 0), thickness=2)
-            )
-            gesture_key = classify_gesture(hand_landmarks.landmark)
-        confidence = "High"
+    cv2.drawContours(annotated, [contour], -1, (0, 255, 100), 3)
+    
+    # Convex hull + defects to count fingers
+    hull = cv2.convexHull(contour, returnPoints=False)
+    
+    try:
+        defects = cv2.convexityDefects(contour, hull)
+    except:
+        defects = None
+    
+    fingers = 0
+    if defects is not None:
+        for i in range(defects.shape[0]):
+            s, e, f, d = defects[i, 0]
+            start = tuple(contour[s][0])
+            end = tuple(contour[e][0])
+            far = tuple(contour[f][0])
+            
+            # Angle at the defect point
+            a = np.linalg.norm(np.array(end) - np.array(start))
+            b = np.linalg.norm(np.array(far) - np.array(start))
+            c = np.linalg.norm(np.array(end) - np.array(far))
+            
+            if 2 * b * c == 0:
+                continue
+            angle = np.arccos((b**2 + c**2 - a**2) / (2 * b * c))
+            
+            if angle <= np.pi / 2 and d > 10000:
+                fingers += 1
+                cv2.circle(annotated, far, 8, (255, 0, 0), -1)
+    
+    fingers = min(fingers + 1, 5)
+    
+    gesture_map = {
+        1: "☝️ Pointing / 👍 Thumbs Up",
+        2: "✌️ Peace",
+        3: "🤟 Three Fingers",
+        4: "🖐 Four Fingers",
+        5: "✋ Open Hand"
+    }
+    
+    if fingers == 0:
+        gesture = "✊ Fist"
     else:
-        confidence = "No hand detected"
-    label = GESTURE_LABELS.get(gesture_key, "❓ Unknown")
-    return annotated, label, confidence
+        gesture = gesture_map.get(fingers, "✋ Open Hand")
+    
+    return annotated, gesture, "Medium"
 
-# ── UI ────────────────────────────────────────────────────────
+# ── UI ──────────────────────────────────────────────────────
 st.set_page_config(page_title="Hand Gesture Recognition", page_icon="🤚", layout="centered")
 
 st.title("🤚 Hand Gesture Recognition")
-st.write("Upload a hand image to detect the gesture using MediaPipe.")
+st.write("Upload a hand image to detect the gesture.")
 
 uploaded = st.file_uploader("Upload image (JPG/PNG)", type=["jpg", "jpeg", "png"])
 
 if uploaded:
     image_bytes = uploaded.read()
+    img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    img_np = np.array(img)
+    
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("**Original**")
-        st.image(Image.open(io.BytesIO(image_bytes)), use_container_width=True)
+        st.image(img, use_container_width=True)
+    
     with st.spinner("Detecting..."):
-        annotated_np, gesture_label, confidence = process_image(image_bytes)
+        annotated, gesture, confidence = detect_gesture(img_np)
+    
     with col2:
-        st.markdown("**Landmarks**")
-        if annotated_np is not None:
-            st.image(annotated_np, use_container_width=True)
-    st.success(f"Gesture: {gesture_label}  |  Confidence: {confidence}")
+        st.markdown("**Detection**")
+        st.image(annotated, use_container_width=True)
+    
+    st.success(f"Gesture: {gesture}  |  Confidence: {confidence}")
+
 else:
-    st.info("👆 Upload a hand image to get started.")
+    st.info("👆 Upload a clear hand image on a plain background.")
+
+st.markdown("---")
+st.markdown("<center style='color:gray;font-size:0.8rem;'>SkillCraft Technology · Task 04</center>", unsafe_allow_html=True)
