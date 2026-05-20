@@ -4,7 +4,6 @@ import numpy as np
 from PIL import Image
 import mediapipe as mp
 
-# Page config
 st.set_page_config(
     page_title="Hand Gesture Recognition",
     page_icon="🤚",
@@ -12,7 +11,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600&display=swap');
@@ -46,16 +44,16 @@ st.markdown("""
     .stButton > button {
         background: linear-gradient(135deg, #00f5d4, #7b2ff7);
         color: white; font-family: 'Orbitron', sans-serif;
-        font-weight: 700; border: none; border-radius: 8px;
-        padding: 10px 28px;
+        font-weight: 700; border: none; border-radius: 8px; padding: 10px 28px;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# MediaPipe setup
-mp_hands = mp.solutions.hands
-mp_drawing = mp.solutions.drawing_utils
+# ── MediaPipe setup (solutions API — requires mediapipe==0.10.9) ──────────────
+mp_hands         = mp.solutions.hands
+mp_drawing       = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
+
 
 # ── Gesture Logic ─────────────────────────────────────────────────────────────
 
@@ -64,10 +62,10 @@ def get_finger_states(hand_landmarks):
     pips = [6, 10, 14, 18]
     fingers = []
 
-    thumb_tip  = hand_landmarks.landmark[4]
-    thumb_ip   = hand_landmarks.landmark[3]
-    wrist      = hand_landmarks.landmark[0]
-    index_mcp  = hand_landmarks.landmark[5]
+    thumb_tip = hand_landmarks.landmark[4]
+    thumb_ip  = hand_landmarks.landmark[3]
+    wrist     = hand_landmarks.landmark[0]
+    index_mcp = hand_landmarks.landmark[5]
 
     if wrist.x < index_mcp.x:
         fingers.append(thumb_tip.x > thumb_ip.x)
@@ -83,38 +81,29 @@ def get_finger_states(hand_landmarks):
 def classify_gesture(fingers):
     thumb, index, middle, ring, pinky = fingers
 
-    if not any(fingers):               return "FIST ✊",        "Closed fist."
-    if all(fingers):                   return "OPEN HAND 🖐️",  "All fingers extended."
-    if not thumb and index and not middle and not ring and not pinky:
-                                       return "POINTING ☝️",   "Index finger only."
-    if not thumb and index and middle and not ring and not pinky:
-                                       return "PEACE ✌️",       "Victory sign."
-    if thumb and index and not middle and not ring and not pinky:
-                                       return "L-SHAPE 👆",     "Thumb + index."
-    if thumb and not index and not middle and not ring and pinky:
-                                       return "HANG LOOSE 🤙",  "Thumb + pinky."
-    if not thumb and not index and not middle and not ring and pinky:
-                                       return "PINKY 🤙",       "Only pinky."
-    if thumb and index and middle and not ring and not pinky:
-                                       return "THREE 🤟",       "Three fingers."
-    if not thumb and index and middle and ring and pinky:
-                                       return "FOUR 🖖",        "Four fingers."
-    if thumb and not index and not middle and not ring and not pinky:
-                                       return "THUMBS UP 👍",   "Thumb up!"
+    if not any(fingers):                                              return "FIST ✊",       "Closed fist."
+    if all(fingers):                                                  return "OPEN HAND 🖐️", "All fingers extended."
+    if not thumb and index and not middle and not ring and not pinky: return "POINTING ☝️",  "Index finger only."
+    if not thumb and index and middle and not ring and not pinky:     return "PEACE ✌️",      "Victory sign."
+    if thumb and index and not middle and not ring and not pinky:     return "L-SHAPE 👆",    "Thumb + index."
+    if thumb and not index and not middle and not ring and pinky:     return "HANG LOOSE 🤙", "Thumb + pinky."
+    if not thumb and not index and not middle and not ring and pinky: return "PINKY 🤙",      "Only pinky."
+    if thumb and index and middle and not ring and not pinky:         return "THREE 🤟",      "Three fingers."
+    if not thumb and index and middle and ring and pinky:             return "FOUR 🖖",       "Four fingers."
+    if thumb and not index and not middle and not ring and not pinky: return "THUMBS UP 👍",  "Thumb up!"
 
-    extended = sum(fingers)
-    return f"CUSTOM ({extended}) 🤚", f"{extended} fingers detected."
+    return f"CUSTOM ({sum(fingers)}) 🤚", f"{sum(fingers)} fingers detected."
 
 
-def process_image(image_np):
-    image_rgb   = cv2.cvtColor(image_np, cv2.COLOR_BGR2RGB)
+def process_image(image_bgr):
+    image_rgb   = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
     results_out = []
 
     with mp_hands.Hands(static_image_mode=True, max_num_hands=2,
                         min_detection_confidence=0.5) as hands:
         results = hands.process(image_rgb)
 
-    annotated = image_np.copy()
+    annotated = image_bgr.copy()
 
     if results.multi_hand_landmarks:
         for idx, hand_lm in enumerate(results.multi_hand_landmarks):
@@ -128,13 +117,12 @@ def process_image(image_np):
             label         = results.multi_handedness[idx].classification[0].label
             conf          = results.multi_handedness[idx].classification[0].score
             results_out.append({"hand": label, "gesture": gesture,
-                                 "desc": desc,  "conf": conf, "fingers": fingers})
+                                 "desc": desc, "conf": conf, "fingers": fingers})
 
     return cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB), results_out
 
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
-
 with st.sidebar:
     st.markdown("## 🤚 HGR Settings")
     st.markdown("---")
@@ -154,7 +142,6 @@ with st.sidebar:
 
 
 # ── Main UI ───────────────────────────────────────────────────────────────────
-
 st.markdown("# 🤚 Hand Gesture Recognition")
 st.markdown("**Task 04 — SkillCraft Technology** | Powered by MediaPipe + Streamlit")
 st.markdown("---")
@@ -201,7 +188,7 @@ with tab1:
                     fcols = st.columns(5)
                     for i, (fname, fstate) in enumerate(zip(finger_names, d["fingers"])):
                         with fcols[i]:
-                            color = "rgba(0,245,212,0.2)" if fstate else "rgba(255,60,60,0.1)"
+                            color  = "rgba(0,245,212,0.2)" if fstate else "rgba(255,60,60,0.1)"
                             border = "#00f5d4" if fstate else "#ff3c3c"
                             st.markdown(
                                 f"<div style='text-align:center;padding:8px;border-radius:6px;"
@@ -254,9 +241,9 @@ with tab3:
         st.markdown("""
         <div class='info-box'>
         <b>Task 04 — SkillCraft Technology</b><br><br>
-        Develop a hand gesture recognition model that accurately identifies and classifies
-        different hand gestures from image or video data, enabling intuitive human-computer
-        interaction and gesture-based control systems.
+        Develop a hand gesture recognition model that accurately identifies
+        and classifies different hand gestures from image or video data,
+        enabling intuitive human-computer interaction.
         </div>
         """, unsafe_allow_html=True)
         st.markdown("""
@@ -264,13 +251,12 @@ with tab3:
         - 🖐️ **MediaPipe Hands** — landmark detection
         - 🐍 **Python + OpenCV** — image processing
         - 🌐 **Streamlit** — web interface
-        - 🤖 Rule-based gesture classifier
         """)
     with c2:
         st.markdown("""
         **How It Works**
         1. MediaPipe detects 21 hand landmarks per hand
-        2. Finger states (extended/folded) computed from Y-coordinates
+        2. Finger states computed from Y-coordinates
         3. Rule-based classifier maps states → gesture label
         4. Results overlaid on the image/video frame
 
