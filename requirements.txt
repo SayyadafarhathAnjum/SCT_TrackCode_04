@@ -1,7 +1,5 @@
-numpy
-matplotlib
-scikit-learn
-opencv-python-headless
-streamlit
-Pillow
-mediapipe
+numpy==1.26.4
+opencv-python-headless==4.9.0.80
+mediapipe==0.10.11
+Pillow==10.2.0
+streamlit==1.32.0
