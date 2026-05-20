@@ -1,8 +1,6 @@
-streamlit>=1.32.0
-mediapipe==0.10.35
-opencv-python-headless==4.13.0.92
-numpy==2.4.6
-pillow==12.2.0
-scikit-learn==1.8.0
-matplotlib==3.10.9
-pandas==3.0.3
+streamlit
+mediapipe
+scikit-learn
+opencv-python-headless
+numpy
+Pillow
