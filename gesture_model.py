@@ -1,4 +1,4 @@
- import mediapipe as mp
+import mediapipe as mp
 import numpy as np
 import cv2
 
@@ -44,9 +44,8 @@ def classify_gesture(landmarks):
         return "ok"
     thumb_tip = landmarks[4]
     wrist = landmarks[0]
-    if thumb and not index and not middle and not ring and not pinky:
-        if thumb_tip.y > wrist.y:
-            return "thumbs_down"
+    if thumb_tip.y > wrist.y:
+        return "thumbs_down"
     return "unknown"
 
 def process_image(image_bytes):
