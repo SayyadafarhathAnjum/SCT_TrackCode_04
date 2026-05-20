@@ -1,155 +1,75 @@
-# ============================================================
-# Streamlit App - Hand Gesture Recognition
-# SkillCraft Technology - Task 04
-# ============================================================
-
 import streamlit as st
-import numpy as np
-import cv2
 from PIL import Image
+import numpy as np
+import io
+from gesture_model import process_image, GESTURE_LABELS
 
 st.set_page_config(
     page_title="Hand Gesture Recognition",
-    page_icon="🖐️",
+    page_icon="🤚",
     layout="centered"
 )
 
-st.title("🖐️ Hand Gesture Recognition")
-st.markdown("**CNN Model | SkillCraft Technology - Task 04**")
-st.markdown("---")
+st.markdown("""
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@300;500;700&display=swap');
+    html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+    .stApp { background: linear-gradient(135deg, #0f0c29, #302b63, #24243e); color: #f0f0f0; }
+    .title-box {
+        background: rgba(255,255,255,0.07);
+        border: 1px solid rgba(255,255,255,0.15);
+        border-radius: 16px;
+        padding: 24px 32px;
+        margin-bottom: 28px;
+        text-align: center;
+    }
+    .title-box h1 { font-family: 'Space Mono', monospace; font-size: 2rem; color: #a78bfa; margin: 0; }
+    .title-box p { color: #c4b5fd; margin: 8px 0 0; font-size: 0.95rem; }
+    .result-card {
+        background: rgba(167,139,250,0.12);
+        border: 1px solid #a78bfa;
+        border-radius: 12px;
+        padding: 20px 28px;
+        margin-top: 20px;
+        text-align: center;
+    }
+    .gesture-label { font-size: 2rem; font-weight: 700; color: #c4b5fd; }
+    .confidence-label { font-size: 0.9rem; color: #a0aec0; margin-top: 6px; }
+</style>
+""", unsafe_allow_html=True)
 
-# Gesture labels
-GESTURES = {
-    0: ("✊", "Fist"),
-    1: ("☝️", "Index Finger"),
-    2: ("✌️", "Victory / Peace"),
-    3: ("🤟", "Love / Rock"),
-    4: ("🖐️", "Open Palm"),
-    5: ("👍", "Thumbs Up"),
-    6: ("👎", "Thumbs Down"),
-    7: ("🤙", "Call Me"),
-    8: ("👌", "OK Sign"),
-    9: ("🤞", "Crossed Fingers"),
-}
+st.markdown("""
+<div class="title-box">
+    <h1>🤚 Hand Gesture Recognition</h1>
+    <p>Upload a hand image — MediaPipe detects and classifies the gesture</p>
+</div>
+""", unsafe_allow_html=True)
 
-IMG_SIZE = 64
-
-st.info("📌 Upload a hand gesture image to classify it!")
-
-uploaded = st.file_uploader(
-    "Upload Hand Gesture Image (JPG/PNG)",
-    type=["jpg", "jpeg", "png"]
-)
+uploaded = st.file_uploader("Upload a hand image (JPG / PNG)", type=["jpg", "jpeg", "png"])
 
 if uploaded:
-    image = Image.open(uploaded).convert("RGB")
-    st.image(image, caption="Uploaded Image",
-             use_column_width=True)
-
-    # Preprocess
-    img_array = np.array(image)
-    gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
-    blurred = cv2.GaussianBlur(gray, (7, 7), 0)
-    resized = cv2.resize(blurred, (IMG_SIZE, IMG_SIZE))
-
-    # Feature extraction
-    edges = cv2.Canny(resized, 30, 100)
-    edge_density = np.sum(edges > 0) / (IMG_SIZE * IMG_SIZE)
-
-    _, binary = cv2.threshold(
-        resized, 0, 255,
-        cv2.THRESH_BINARY + cv2.THRESH_OTSU
-    )
-    white_ratio = np.sum(binary > 0) / (IMG_SIZE * IMG_SIZE)
-    brightness = np.mean(resized) / 255.0
-
-    contours, _ = cv2.findContours(
-        binary, cv2.RETR_EXTERNAL,
-        cv2.CHAIN_APPROX_SIMPLE
-    )
-    num_contours = len(contours)
-    largest_area = max([cv2.contourArea(c)
-                       for c in contours], default=0)
-    largest_area_ratio = largest_area / (IMG_SIZE * IMG_SIZE)
-
-    # Classify based on features
-    score = (edge_density * 10 +
-             white_ratio * 5 +
-             num_contours * 0.1)
-
-    if score < 1.5:
-        pred_idx = 0   # Fist
-    elif score < 2.5:
-        pred_idx = 4   # Open Palm
-    elif score < 3.5:
-        pred_idx = 1   # Index
-    elif score < 4.5:
-        pred_idx = 2   # Victory
-    elif score < 5.5:
-        pred_idx = 5   # Thumbs Up
-    elif score < 6.5:
-        pred_idx = 8   # OK
-    elif score < 7.5:
-        pred_idx = 3   # Love
-    elif score < 8.5:
-        pred_idx = 6   # Thumbs Down
-    elif score < 9.5:
-        pred_idx = 7   # Call Me
-    else:
-        pred_idx = 9   # Crossed
-
-    emoji, gesture_name = GESTURES[pred_idx]
-    confidence = min(95.0, 55.0 + score * 3)
-
-    st.markdown("---")
-    st.markdown(f"## Prediction: {emoji} {gesture_name}")
-    st.progress(int(confidence))
-    st.markdown(f"**Confidence: {confidence:.1f}%**")
-
-    st.markdown("---")
-    st.markdown("### 🔍 Image Features")
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Edge Density", f"{edge_density:.3f}")
-    col2.metric("White Ratio", f"{white_ratio:.3f}")
-    col3.metric("Brightness", f"{brightness:.3f}")
-
-    st.markdown("### 📊 Feature Chart")
-    st.bar_chart({
-        "Edge Density": [edge_density],
-        "White Ratio": [white_ratio],
-        "Brightness": [brightness],
-        "Area Ratio": [largest_area_ratio]
-    })
-
-    st.markdown("### 🖐️ All Gesture Classes")
-    cols = st.columns(5)
-    for i, (emoji, name) in GESTURES.items():
-        cols[i % 5].markdown(
-            f"**{emoji}**<br>{name}",
-            unsafe_allow_html=True
-        )
-
-    st.caption(
-        "💡 For higher accuracy, train the full CNN model "
-        "with the Kaggle Hand Gesture Dataset."
-    )
-
+    image_bytes = uploaded.read()
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("**Original Image**")
+        original = Image.open(io.BytesIO(image_bytes))
+        st.image(original, use_container_width=True)
+    with st.spinner("Detecting gesture..."):
+        annotated_np, gesture_label, confidence = process_image(image_bytes)
+    with col2:
+        st.markdown("**Landmark Detection**")
+        if annotated_np is not None:
+            st.image(annotated_np, use_container_width=True)
+        else:
+            st.warning("Could not process image.")
+    st.markdown(f"""
+    <div class="result-card">
+        <div class="gesture-label">{gesture_label}</div>
+        <div class="confidence-label">Confidence: {confidence}</div>
+    </div>
+    """, unsafe_allow_html=True)
 else:
-    st.markdown("### 🖐️ Supported Gestures:")
-    cols = st.columns(5)
-    for i, (emoji, name) in GESTURES.items():
-        cols[i % 5].markdown(
-            f"**{emoji}**<br>{name}",
-            unsafe_allow_html=True
-        )
+    st.info("👆 Upload a clear image of a hand to get started.")
 
-    st.markdown("---")
-    st.markdown("""
-    ### ℹ️ How it works:
-    1. Upload a hand gesture image
-    2. CNN model analyzes the features
-    3. Get instant gesture prediction
-
-    **Model:** Convolutional Neural Network (CNN)
-    **Dataset:** [Kaggle Hand Gesture Dataset](https://www.kaggle.com/datasets/gti-upm/leapgestrecog)
-    """)
+st.markdown("---")
+st.markdown("<center style='color:#718096;font-size:0.8rem;'>SkillCraft Technology · Task 04</center>", unsafe_allow_html=True)
